@@ -1,0 +1,73 @@
+#!/bin/bash 
+
+# set -x
+
+RED="\e[31m" 
+GREEN="\e[92m"
+RESET="\e[0m"
+BLUE="\e[34m"
+BLINK="\e[5m"
+YELLOW="\e[93m"
+
+
+function list() {
+	echo 
+	curl -s http://172.16.110.131:5000/v2/_catalog  | sed 's/.*repositories":\[//' | sed 's/\]}//' | tr "," "\n" | tr -d "\""
+	echo 
+}
+
+function tags () {
+	result=$(curl -s http://172.16.110.131:5000/v2/$1/tags/list)  
+	unknownImage=$(echo $result | grep error)
+	if [[ -z $unknownImage ]] ; then 
+		curl -s http://172.16.110.131:5000/v2/$1/tags/list  | sed 's/.*tags.*:\[//'| sed 's/\]}//' | tr "," "\n" | tr -d "\"" 
+	else 
+		echo -e "${BLINK}${RED}[WARNING] ${RESET}Unknown Image !"
+	fi
+}
+
+function delete() {
+	echo 
+  if [ -z $2 ] ; then 
+			echo -e "${GREEN}[*] ${RESET}Please choice a tag : "
+			tags $1 
+			exit 1
+	fi
+
+	echo 
+
+	hash=$(curl -v --silent -H "Accept: application/vnd.docker.distribution.manifest.v2+json" -X GET http://172.16.110.131:5000/v2/$1/manifests/$2 2>&1 | grep Docker-Content-Digest | awk '{print ($3)}' | tr -d "\r") 
+
+	if [[ -z $hash ]] ; then 
+			echo -e "${BLINK}${RED}[WARNING] ${RESET}Image not found" 
+			exit 1
+	fi
+
+	echo -e "${GREEN}[*] ${RESET}Image hash : ${BLUE} $hash ${RESET}"
+	curl --silent -H "Accept: application/vnd.docker.distribution.manifest.v2+json" -X DELETE http://172.16.110.131:5000/v2/$1/manifests/$hash > /dev/null
+
+
+	empTag=$(curl -s http://172.16.110.131:5000/v2/$1/tags/list  | sed 's/.*tags.*:\[//'| sed 's/\]}//'  | grep null) 
+
+	if [ ! -z $empTag ] ; then 
+		repo_dir=$(docker exec -it registry find / | grep $1 | head -n1 | tr -d "\r" | tr -d "\n") 
+		echo -e "${GREEN}[*] ${RESET}Remove ${YELLOW}$1 ${RESET}from repository"
+		docker exec -it registry rm -rf "$repo_dir"
+	fi
+
+	echo -e "${GREEN}[*] ${RESET}Clean up docker registry"
+	docker-cleanup > /dev/null 2>&1 
+
+	echo -e "${GREEN}[*] ${RESET}Restart docker registry"
+	docker restart registry  > /dev/null  
+
+	echo 
+} 
+
+
+case $1 in 
+	"list") list  ;;
+	"tags") tags $2 $3  ;;
+	"delete") delete $2 $3 ;; 
+	*) echo "Usage list|tags|delete"
+esac
