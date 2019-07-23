@@ -12,22 +12,36 @@ YELLOW="\e[93m"
 
 function list() {
 	echo 
-	curl -s http://172.16.110.131:5000/v2/_catalog  | sed 's/.*repositories":\[//' | sed 's/\]}//' | tr "," "\n" | tr -d "\""
+	images=$(curl -s http://172.16.110.131:5000/v2/_catalog  | sed 's/.*repositories":\[//' | sed 's/\]}//' | tr "," "\n" | tr -d "\"") 
+	tmp="/tmp/output-list"
+	for I in $images 
+	do 
+			tags $I >> $tmp
+	done 
+	cat $tmp | column -t 
+	rm $tmp
 	echo 
 }
 
-function tags () {
+function tags () { 
+	if [ -z $1 ] ; then 
+			echo -e "${RED}Usage: tags ${BLINK}TMAGE_NAME${RESET}" 
+			exit 1
+	fi
 	result=$(curl -s http://172.16.110.131:5000/v2/$1/tags/list)  
 	unknownImage=$(echo $result | grep error)
 	if [[ -z $unknownImage ]] ; then 
-		curl -s http://172.16.110.131:5000/v2/$1/tags/list  | sed 's/.*tags.*:\[//'| sed 's/\]}//' | tr "," "\n" | tr -d "\"" 
+			tags=$(curl -s http://172.16.110.131:5000/v2/$1/tags/list  | sed 's/.*tags.*:\[//'| sed 's/\]}//' | tr "," "\n" | tr -d "\"") 
+			for I in $tags 
+			do 
+					echo -e "$1 ${YELLOW}$I${RESET}"
+			done
 	else 
 		echo -e "${BLINK}${RED}[WARNING] ${RESET}Unknown Image !"
 	fi
 }
 
 function delete() {
-	echo 
   if [ -z $2 ] ; then 
 			echo -e "${GREEN}[*] ${RESET}Please choice a tag : "
 			tags $1 
@@ -42,6 +56,7 @@ function delete() {
 			echo -e "${BLINK}${RED}[WARNING] ${RESET}Image not found" 
 			exit 1
 	fi
+	echo
 
 	echo -e "${GREEN}[*] ${RESET}Image hash : ${BLUE} $hash ${RESET}"
 	curl --silent -H "Accept: application/vnd.docker.distribution.manifest.v2+json" -X DELETE http://172.16.110.131:5000/v2/$1/manifests/$hash > /dev/null
