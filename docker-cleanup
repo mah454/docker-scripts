@@ -1,4 +1,20 @@
 #!/bin/bash 
 
-docker image prune -a -f
-docker exec  registry /bin/registry garbage-collect /etc/docker/registry/config.yml --delete-untagged=true
+# set -x
+if [ ! -z $1 ] ; then  
+		if [[ $(docker-registry tags $1 | grep -v latest | grep -v "Unknown Image" | wc -l) > 0 ]] ; then
+				docker-registry tags $1 | grep -v latest | while read line
+				do 
+						TAG=$(echo $line | awk '{print $2}') 
+				 		docker-registry delete  $1 $TAG
+				done
+		fi
+else 
+		docker image prune -a -f
+		docker exec  registry /bin/registry garbage-collect /etc/docker/registry/config.yml --delete-untagged=true
+fi
+ 
+
+
+
+# docker images --format '{{ .Repository }}:{{.Tag }}' | grep web | xargs docker rmi}}}}
